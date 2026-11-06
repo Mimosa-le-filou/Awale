@@ -90,7 +90,7 @@ void print_pending_challenges(player* p, const player* playerList, char* buffer)
 			strcat(buffer, "Défi reçu de : ");
 			strcat(buffer, playerList[p->challenges[i].player_id].name);
 			strcat(buffer, " à ");
-			// strcat(buffer, asctime(p->challenges[i].time));
+			strcat(buffer, asctime(p->challenges[i].time));
 			strcat(buffer, "\n");
 		}
 		strcat(buffer, "----------\n");
@@ -113,6 +113,7 @@ void *run(void *arg){
 	printf("Thread [%lu] is running player %s of id %d\n", thisThread, p->name, p->id);
 	
 	while(1){
+		memset(answer, 0, sizeof(answer));
 		int n = read(p->socket, answer, sizeof(answer)-1);
 	
 		///// Procédure de déconnexion -- à implémenter
@@ -132,7 +133,7 @@ void *run(void *arg){
 		/////
 
 		answer[strcspn(answer, "\r\n")] = '\0';
-		printf("Message reçu !\n");
+		printf("Message reçu : %s\n", answer);
 
 	
 		switch(p->status){
@@ -177,9 +178,11 @@ void *run(void *arg){
 					printf("%d\n", i);
 					if(i < MAX_PLAYER){
 						pthread_mutex_lock(&playerList[i].lock);
-						playerList[i].challenges[playerList[i].numb_chall++].player_id = p->id;
+						int count = playerList[i].numb_chall;
+						playerList[i].challenges[count].player_id = p->id;
 						time_t now = time(NULL);
-						playerList[i].challenges[playerList[i].numb_chall].time = localtime(&now);
+						playerList[i].challenges[count].time = localtime(&now);
+						++playerList[i].numb_chall;
 						//message[0] = '\0';
 						//sprintf(message,"Vous avez été défié par le joueur : %s\n",p->name);
 						//write(playerList[i].socket, message, strlen(message));
@@ -188,6 +191,7 @@ void *run(void *arg){
 					}
 					else{write(p->socket, "Aucun joueur correspondant\n", strlen("Aucun joueur correspondant\n"));}
 				}
+				else{write(p->socket,"Commande non reconnue\n", strlen("Commande non reconnue\n"));}
 				break;
 			}
 
