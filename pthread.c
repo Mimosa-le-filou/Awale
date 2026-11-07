@@ -39,6 +39,11 @@ typedef struct {
 	pthread_mutex_t lock;
 } player;
 
+typedef struct {
+	player* list;
+	pthread_mutex_t lock;
+	uint player_connected;
+} playerDataBase;
 
 typedef struct {
 	int p1_id;
@@ -49,8 +54,11 @@ typedef struct {
 
 typedef struct {
 	int playerId;
-	player *playerList;
+	playerDataBase* DB;
 } thread_args;
+
+
+
 
 void debug_print_bytes(const char *label, const char *str) {
     printf("%s: ", label);
@@ -106,8 +114,15 @@ void *run(void *arg){
 	char answer[1024];
 
 	thread_args *t = (thread_args*) arg;
-	player *p = &t->playerList[t->playerId];
-	player *playerList = t->playerList;
+	player *playerList = t->DB->list;
+	player *p = &playerList[t->playerId];
+	
+
+	//Réception du pseudo client et confirmation de réception
+	memset(message, 0, sizeof(message));
+	int n = read(p->socket, message, sizeof(message) -1);
+	message[strcspn(message, "\r\n")] = '\0';
+	strcpy(p->name, message);
 
     pthread_t thisThread = pthread_self();
 	printf("Thread [%lu] is running player %s of id %d\n", thisThread, p->name, p->id);
@@ -124,8 +139,7 @@ void *run(void *arg){
 				printf("Joueur %s déconnecté.\n", p->name);
 			} else {
 				perror("Erreur de lecture socket");
-			}
-			
+			}	
 			close(p->socket);
 			//cleanup_player(p, playerList, gameList);
 			return NULL; // Interruption immédiate du thread
@@ -240,14 +254,17 @@ int main(int argc, char** argv )
 	int    sockfd,newsockfd,chilpid,ok,nleft,nbwriten;
 	socklen_t clilen = sizeof(cli_addr);
 	char buffer[1024];
-	int player_connected = 0;
+	
 
 	// Concernant les threads
 	pthread_t threads[MAX_PLAYER];
 
 	// Initialisation de la *base de données des joueurs
 	player *player_list = malloc(sizeof(player)*MAX_PLAYER);
+	playerDataBase *playerDB = malloc(sizeof(playerDataBase));
+	playerDB->player_connected = 0;
 	initDb(player_list, MAX_PLAYER);
+	playerDB->list = player_list;
 
 	// Initialisation de la base de données des instances de jeu
 	game *game_list = malloc(sizeof(game)*MAX_PLAYER);
@@ -284,10 +301,6 @@ int main(int argc, char** argv )
 		if (client_socket<0) {printf ("accept error\n"); exit(0);}
 		printf ("connection accepted\n");
 
-		//Réception du pseudo client et confirmation de réception
-		memset(buffer, 0, sizeof(buffer));
-		int n = read(client_socket, buffer, sizeof(buffer) -1);
-		buffer[strcspn(buffer, "\r\n")] = '\0';
 
 		// Allocation de l'id et vérification de la saturation de serveur
 		int player_id;
@@ -299,11 +312,15 @@ int main(int argc, char** argv )
 			}
 		}
 		if(i == MAX_PLAYER){
-			write(client_socket, "Il y a trop de joueurs en jeu actuellement...\r\n", 48);
+			char satured = 1;
+			write(client_socket, &satured, 1);
 			close(client_socket);
 			continue;
 		}
-
+		else {
+			char satured = 0;
+			write(client_socket, &satured, 1);	
+		}
 
 		// Création d'un joueur statique
 		player p = {
@@ -312,19 +329,17 @@ int main(int argc, char** argv )
 			.status = IN_MENU,
 			.numb_chall = 0,
 		};
-		strcpy(p.name, buffer);
-		
-
+	
 		// Pseudo-persistance du joueur dans la base données
+		pthread_mutex_lock(&playerDB->lock);
 		memcpy(&player_list[player_id], &p, sizeof(player));
-		++player_connected;	
-		printf("Nouveau joueur: %s\n", player_list[player_id].name);
+		++playerDB->player_connected;
+		pthread_mutex_unlock(&playerDB->lock);
 		write(client_socket, "Pseudo enregistré !\n", 22);
-
 		// Faire gaffe aux copies de mémoires
 		thread_args *args = malloc(sizeof(thread_args));
 		args->playerId = player_id;
-		args->playerList = player_list;
+		args->DB = playerDB;
 		pthread_create(&threads[player_id], NULL, &run, (void *) args);
 	}
 	close(sockfd);

@@ -70,9 +70,30 @@ int main(int argc, char** argv )
 	{printf("socket error\n");exit(0);}
 
 
-	// Enregistrement du client
-	printf("Connexion au serveur réussie\n");
+	
+	char satured;
+	// Le serveur dit au client si oui ou non le serveur est saturé
+	int n = read(sockfd, &satured, 1);
+	if (n <= 0) {
+		if (n == 0) {
+			printf("Serveur déconnecté");
+		} else {
+			perror("Erreur de lecture socket");
+		}	
+		close(sockfd);
+	}
+	else {
+		if(satured == 1){
+			printf("Serveur saturé réessayez plus tard..\nCode de retour : %d\n", satured);
+			close(sockfd);
+			return 0;
+		}
+		else{
+			printf("Connexion au serveur réussie !\nCode de retour : %d\n", satured);
+		}
+	}
 
+	
 	// Envoi du pseudo et confirmation de réception
 	printf("Quel est votre pseudo ? (taille max = 20 caractères) : ");
 	int pseudo = 0;
