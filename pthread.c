@@ -17,6 +17,9 @@
 
 #define MAX_NAME 20
 #define MAX_PLAYER 100
+#define MAX_GAMES_PER_PLAYER 5
+
+
 enum PLAYER_STATUS { // traiter le joueur comme une machine à états finis
     IN_MENU,
     IN_GAME,
@@ -28,7 +31,24 @@ typedef struct {
 	int player_id;
 } challenge;
 
+
+typedef struct {
+	int id;
+	int p1_id;
+	int p2_id;
+	int turn_player_id;
+
+	int board[12];
+	int score_p1;
+	int score_p2;
+	int is_finished;
+	pthread_mutex_t lock;
+} game;
+
+
 struct sockaddr_in cli_addr,serv_addr;
+
+
 typedef struct {
 	int id;
 	int socket;
@@ -36,8 +56,11 @@ typedef struct {
 	enum PLAYER_STATUS status;
 	challenge challenges[5];
 	int numb_chall;
+	game *active_games[MAX_GAMES_PER_PLAYER];
+	int num_games;
 	pthread_mutex_t lock;
 } player;
+
 
 typedef struct {
 	player* list;
@@ -45,12 +68,6 @@ typedef struct {
 	uint player_connected;
 } playerDataBase;
 
-typedef struct {
-	int p1_id;
-	int p2_id;
-	int turn;
-	pthread_mutex_t lock;
-} game;
 
 typedef struct {
 	int playerId;
