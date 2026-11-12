@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <sys/select.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -44,6 +45,7 @@ int main(int argc, char** argv )
 	char player_name[MAX_NAME+1];
 	char message[1024];
 	char answer[1024];
+	fd_set readfds;
 
 
 	// Vérification de l'entrée 
@@ -120,19 +122,38 @@ int main(int argc, char** argv )
 		printf(">> ");
 		fflush(stdout);
 
-		if(fgets(message, sizeof(message), stdin) != NULL){
-			 message[strcspn(message, "\r\n")] = '\0';
-			if(strlen(message) == 0) continue;
-			write(sockfd, message, strlen(message));
+		FD_ZERO(&readfds);
+		FD_SET(STDIN_FILENO, &readfds); // Descripteur 0 : clavier
+		FD_SET(sockfd, &readfds); // socket serveur
+		
+		int max_fd = (sockfd > STDIN_FILENO) ? sockfd : STDIN_FILENO;
+
+		// Attente bloquante sur le premier descripteur acitf
+		if (select(max_fd + 1, &readfds, NULL, NULL, NULL) < 0){
+			perror("Erreur select");
+			break;
 		}
-		int n = read(sockfd, answer, sizeof(answer) - 1);
-        if (n > 0) {
-            answer[n] = '\0';
-            printf("%s", answer);
-        } else {
-            printf("Connexion perdue avec le serveur.\n");
-            break;
-        }
+
+		// Cas 1 : Données reçues du serveur
+		if (FD_ISSET(sockfd, &readfds)){
+			int n = read(sockfd, answer, sizeof(answer)-1);
+			if (n <= 0){
+				printf("\nConnexion avec le serveur perdue\n");
+				break;
+			}
+			answer[n] = '\0';
+			printf("\r\033[2K%s\n", answer);
+		}
+
+		// Cas 2 : Saisie utilisatuer disponible au clavier
+		if(FD_ISSET(STDIN_FILENO, &readfds)){
+			if(fgets(message, sizeof(message), stdin) != NULL){
+				 message[strcspn(message, "\r\n")] = '\0';
+				if(strlen(message) > 0){
+					write(sockfd, message, strlen(message));
+				}
+			}
+		}
 	}
 
 	close(sockfd);
